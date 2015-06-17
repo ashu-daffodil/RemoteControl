@@ -12,13 +12,18 @@ app.use(bodyParser.json());
 
 app.use(bodyParser.urlencoded({extended: false}));
 
-app.get('/execute/remote', function (req, res) {
+app.all('/execute/remote', function (req, res) {
     var type = req.param("type");
-    var execCmd = req.param("execCmd");
-    var execPath = req.param("execPath");
+    var params = req.param("parameters");
+    if (typeof params === "string") {
+        params = JSON.parse(params);
+    }
     switch (type) {
         case "terminal" :
+            var execPath = params[0];
+            var execCmd = params[1];
             return runCommandInTerminal(execPath, execCmd).then(function (result) {
+                console.log("res in terminal : " + JSON.stringify(result));
                 if (!result) {
                     result = "OK";
                 }
@@ -38,12 +43,28 @@ app.get('/execute/remote', function (req, res) {
             res.end();
             break;
         case "node" :
-            var serverPath = req.param("serverPath");
-            var fileName = req.param("fileName");
-            var cla = req.param("cla");
-            runNodeServer(serverPath, fileName, cla);
+            var serverPath = params[0];
+            var fileName = params[1];
+            var cla = params[2];
+            console.log("serverPath :" + serverPath);
+            console.log("fileName :" + fileName);
+            console.log("cla :" + cla);
+            try{
+                runNodeServer(serverPath, fileName, cla);
+            }catch(e){
+                console.error(e);
+            }
+
             res.writeHead(200);
             res.write("OK Node ");
+            res.end();
+            break;
+        case "script" :
+            var args = req.param("args");
+            var scriptPath = req.param("scriptPath");
+            runCommandInScript(args, scriptPath);
+            res.writeHead(200);
+            res.write("OK Script");
             res.end();
             break;
         default:
@@ -52,6 +73,12 @@ app.get('/execute/remote', function (req, res) {
             res.write("Invalid case");
             res.end();
     }
+});
+
+app.all('/', function (req, res) {
+    res.writeHead(200);
+    res.write("Server running on port 4000.");
+    res.end();
 });
 
 app.listen(4000);
@@ -82,11 +109,27 @@ function runMongodInstance(command) {
 
 function runNodeServer(serverPath, fileName, cla) {
     var cwd = process.cwd();
+    console.log("cwd : "+cwd);
     var child = ChildProcess.spawn(process.execPath, ["runNodeServer.js", serverPath, fileName, cla], {
         detached: true,
         cwd: cwd,
         stdio: 'ignore'
     });
     child.unref();
+    console.log("runNodeServer ... done");
+}
+
+function runCommandInScript(args, scriptPath) {
+    var d = Q.defer();
+    var out = {};
+    var cwd = process.cwd();
+    var execFile = ChildProcess.execFile;
+    execFile(scriptPath, args, {cwd: cwd}, function (error, stdout, stderr) {
+        out.error = error;
+        out.stdout = stdout;
+        out.stderr = stderr;
+        d.resolve(out);
+    });
+    return d.promise;
 }
 
