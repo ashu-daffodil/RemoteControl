@@ -21,7 +21,7 @@ then
 	if [ ${NPATH} ] && [ ${TYPE} = "framework" ] && [ ${COMMAND} ] ;
     then
         hasBranch=null
-        if [ ${COMMAND} = "ApplaneApps" ] || [ ${COMMAND} = "ApplaneDB" ] || [ ${COMMAND} = "ApplaneCore" ] ;
+    if [ ${COMMAND} = "ApplaneApps" ] || [ ${COMMAND} = "ApplaneDB" ] || [ ${COMMAND} = "ApplaneCore" ] ;
         then
             hasBranch="true"
         fi
@@ -46,7 +46,7 @@ then
                 git reset --hard origin
                 git pull ${PREGIT}${COMMAND}.git --quiet
             fi
-        fi
+            fi
         wait
     fi
     if [ ${NPATH} ] && [ ${TYPE} = "source" ] && [ ${COMMAND} ] ;
@@ -63,17 +63,35 @@ then
             cd ${NPATH}
             if [ ${CMD} = "moduleinstall" ] ;
             then
-                git clone ${PREGIT}${COMMAND}.git --quiet
+                if [ ${BRANCH} ] ;
+                then
+                    git clone -b ${BRANCH} ${PREGIT}${COMMAND}.git --quiet
+                else
+                    git clone ${PREGIT}${COMMAND}.git --quiet
+                fi
             elif [ ${CMD} = "moduleupdate" ] ;
             then
                 if [ ! -d ${COMMAND} ] ;
                 then
                     cd ${NPATH}
-                    git clone ${PREGIT}${COMMAND}.git --quiet
+                    if [ ${BRANCH} ] ;
+                    then
+                        git clone -b ${BRANCH} ${PREGIT}${COMMAND}.git --quiet
+                    else
+                        git clone ${PREGIT}${COMMAND}.git --quiet
+                    fi
                 else
                     NPATH=${NPATH}${COMMAND}/
                     cd ${NPATH}
-                    git pull origin master --quiet
+                     if [ ${BRANCH} ] ;
+                     then
+                        git fetch
+                        git checkout ${BRANCH}
+                        git pull origin ${BRANCH} --quiet
+                    else
+                        git checkout master
+                        git pull origin master --quiet
+                    fi
                 fi
             fi
             wait

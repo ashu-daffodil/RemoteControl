@@ -49,9 +49,9 @@ app.all('/execute/remote', function (req, res) {
             console.log("serverPath :" + serverPath);
             console.log("fileName :" + fileName);
             console.log("cla :" + cla);
-            try{
+            try {
                 runNodeServer(serverPath, fileName, cla);
-            }catch(e){
+            } catch (e) {
                 console.error(e);
             }
 
@@ -60,12 +60,22 @@ app.all('/execute/remote', function (req, res) {
             res.end();
             break;
         case "script" :
-            var args = req.param("args");
-            var scriptPath = req.param("scriptPath");
-            runCommandInScript(args, scriptPath);
-            res.writeHead(200);
-            res.write("OK Script");
-            res.end();
+            var args = params[0];
+            var scriptPath = params[1];
+            return runCommandInScript(args, scriptPath).then(function (result) {
+                console.log("res in script : " + JSON.stringify(result));
+                if (!result) {
+                    result = "OK";
+                }
+                res.writeHead(200);
+                res.write(JSON.stringify(result));
+                res.end();
+            }).fail(function (err) {
+                console.error("script error : "+err);
+                res.writeHead(200);
+                res.write("Execute Failed !");
+                res.end();
+            });
             break;
         default:
             console.error("Invalid case");
@@ -109,7 +119,6 @@ function runMongodInstance(command) {
 
 function runNodeServer(serverPath, fileName, cla) {
     var cwd = process.cwd();
-    console.log("cwd : "+cwd);
     var child = ChildProcess.spawn(process.execPath, ["runNodeServer.js", serverPath, fileName, cla], {
         detached: true,
         cwd: cwd,
@@ -120,6 +129,8 @@ function runNodeServer(serverPath, fileName, cla) {
 }
 
 function runCommandInScript(args, scriptPath) {
+    console.log("args : " + args);
+    console.log("scriptPath : " + scriptPath);
     var d = Q.defer();
     var out = {};
     var cwd = process.cwd();
