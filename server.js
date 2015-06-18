@@ -8,11 +8,15 @@ var bodyParser = require('body-parser');
 var ChildProcess = require('child_process');
 var app = express();
 
+var callStatusMap = {};
+
 app.use(bodyParser.json());
 
 app.use(bodyParser.urlencoded({extended: false}));
 
 app.all('/execute/remote', function (req, res) {
+    var reqId = undefined;
+    var execCmd = undefined;
     var type = req.param("type");
     var params = req.param("parameters");
     if (typeof params === "string") {
@@ -20,68 +24,60 @@ app.all('/execute/remote', function (req, res) {
     }
     switch (type) {
         case "terminal" :
+            reqId = getRandomId();
+            callStatusMap[reqId] = {status: "pending"};
             var execPath = params[0];
-            var execCmd = params[1];
-            return runCommandInTerminal(execPath, execCmd).then(function (result) {
-                console.log("res in terminal : " + JSON.stringify(result));
-                if (!result) {
-                    result = "OK";
-                }
-                res.writeHead(200);
-                res.write(JSON.stringify(result));
-                res.end();
-            }).fail(function (err) {
-                res.writeHead(200);
-                res.write("Execute Failed !");
-                res.end();
-            });
+            execCmd = params[1];
+            res.writeHead(200);
+            res.write(JSON.stringify({reqId: reqId}));
+            res.end();
+            runCommandInTerminal(execPath, execCmd, reqId);
             break;
         case "mongo" :
-            runMongodInstance(execCmd);
+            execCmd = params[0];
             res.writeHead(200);
-            res.write("OK Mongo ");
+            res.write(JSON.stringify({result: "OK Mongo"}));
             res.end();
+            runMongodInstance(execCmd);
             break;
         case "node" :
             var serverPath = params[0];
             var fileName = params[1];
             var cla = params[2];
-            console.log("serverPath :" + serverPath);
-            console.log("fileName :" + fileName);
-            console.log("cla :" + cla);
-            try {
-                runNodeServer(serverPath, fileName, cla);
-            } catch (e) {
-                console.error(e);
-            }
-
             res.writeHead(200);
-            res.write("OK Node ");
+            res.write(JSON.stringify({result: "OK Node"}));
             res.end();
+            runNodeServer(serverPath, fileName, cla);
             break;
         case "script" :
+            reqId = getRandomId();
+            callStatusMap[reqId] = {status: "pending"};
             var args = params[0];
             var scriptPath = params[1];
-            return runCommandInScript(args, scriptPath).then(function (result) {
-                console.log("res in script : " + JSON.stringify(result));
-                if (!result) {
-                    result = "OK";
-                }
-                res.writeHead(200);
-                res.write(JSON.stringify(result));
-                res.end();
-            }).fail(function (err) {
-                console.error("script error : "+err);
-                res.writeHead(200);
-                res.write("Execute Failed !");
-                res.end();
-            });
+            res.writeHead(200);
+            res.write(JSON.stringify({reqId: reqId}));
+            res.end();
+            runCommandInScript(args, scriptPath, reqId);
             break;
         default:
             console.error("Invalid case");
             res.writeHead(200);
             res.write("Invalid case");
             res.end();
+    }
+});
+
+app.all('/execute/callStatus', function (req, res) {
+    var reqId = req.param("reqId");
+    var reqResp = callStatusMap[reqId];
+    console.log("callStatus : id : " + reqId);
+    console.log("reqResp  : " + JSON.stringify(reqResp));
+    res.writeHead(200);
+    res.write(JSON.stringify(reqResp));
+    res.end();
+    // TODO clear result from callHistory
+    if (reqResp.result) {
+        delete callStatusMap.reqId;
     }
 });
 
@@ -93,8 +89,7 @@ app.all('/', function (req, res) {
 
 app.listen(4000);
 
-function runCommandInTerminal(path, command) {
-    var d = Q.defer();
+function runCommandInTerminal(path, command, reqId) {
     var args = command;
     var out = {};
     var exec = ChildProcess.exec;
@@ -102,9 +97,9 @@ function runCommandInTerminal(path, command) {
         out.error = error;
         out.stdout = stdout;
         out.stderr = stderr;
-        d.resolve(out);
+        callStatusMap[reqId].result = out;
+        callStatusMap[reqId].status = "done";
     });
-    return d.promise;
 }
 
 function runMongodInstance(command) {
@@ -128,10 +123,9 @@ function runNodeServer(serverPath, fileName, cla) {
     console.log("runNodeServer ... done");
 }
 
-function runCommandInScript(args, scriptPath) {
+function runCommandInScript(args, scriptPath, reqId) {
     console.log("args : " + args);
     console.log("scriptPath : " + scriptPath);
-    var d = Q.defer();
     var out = {};
     var cwd = process.cwd();
     var execFile = ChildProcess.execFile;
@@ -139,8 +133,13 @@ function runCommandInScript(args, scriptPath) {
         out.error = error;
         out.stdout = stdout;
         out.stderr = stderr;
-        d.resolve(out);
+        callStatusMap[reqId].result = out;
+        callStatusMap[reqId].status = "done";
+        console.log("out in script : "+JSON.stringify(out));
     });
-    return d.promise;
+}
+
+function getRandomId() {
+    return (+new Date()).toString(36);
 }
 

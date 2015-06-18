@@ -87,9 +87,11 @@ then
                      then
                         git fetch
                         git checkout ${BRANCH}
+                        git reset --hard origin/${BRANCH}
                         git pull ${PREGIT}${COMMAND} ${BRANCH} --quiet
                     else
                         git checkout master
+                        git reset --hard master
                         git pull ${PREGIT}${COMMAND} --quiet
                     fi
                 fi
